@@ -2,6 +2,8 @@
 import { writeFileSync } from "node:fs";
 import { reviewRepository } from "./core.js";
 
+const USAGE = "Usage: inspector review --repo <path> [--base-ref <ref>] [--validate <command>]...";
+
 type Args = {
   command: string;
   repositoryPath?: string;
@@ -10,27 +12,53 @@ type Args = {
   validations: string[];
 };
 
+class UsageError extends Error {}
+
 function parseArgs(argv: string[]): Args {
   const args: Args = { command: argv[0] ?? "", validations: [] };
   for (let index = 1; index < argv.length; index++) {
     const token = argv[index];
+    const value = (): string => {
+      const next = argv[++index];
+      if (next === undefined || next.startsWith("--")) {
+        throw new UsageError(`${token} needs a value.`);
+      }
+      return next;
+    };
     if (token === "--repo") {
-      args.repositoryPath = argv[++index]?.split(" ")[0];
+      // Keep the whole value: paths may contain spaces.
+      args.repositoryPath = value();
     } else if (token === "--base-ref") {
-      args.baseRef = argv[++index];
+      args.baseRef = value();
     } else if (token === "--format") {
-      args.format = argv[++index] as Args["format"];
+      const format = value();
+      if (format !== "markdown" && format !== "json") {
+        throw new UsageError(`--format must be "markdown" or "json", got "${format}".`);
+      }
+      args.format = format;
     } else if (token === "--validate") {
-      args.validations.push(argv[++index]);
+      args.validations.push(value());
+    } else {
+      throw new UsageError(`Unknown option: ${token}`);
     }
   }
   return args;
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
+  let args: Args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    if (error instanceof UsageError) {
+      console.error(`Error: ${error.message}\n${USAGE}`);
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
+  }
   if (args.command !== "review" || !args.repositoryPath) {
-    console.error("Usage: inspector review --repo <path> [--base-ref <ref>] [--validate <command>]");
+    console.error(USAGE);
     process.exitCode = 1;
     return;
   }
@@ -46,6 +74,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("Fatal error:", error);
+  console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });
