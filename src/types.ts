@@ -7,6 +7,9 @@ export type ValidationResult = {
   command: string;
   status: "passed" | "failed";
   output: string;
+  /** Process exit code, or null when the process was killed or could not start. */
+  exitCode?: number | null;
+  timedOut?: boolean;
 };
 
 export type ReviewRequest = {
